@@ -1,0 +1,56 @@
+run_id: "<arm>__kh-<value_or_na>__kt-<value_or_na>__ds-<value_or_na>__cp-<policy_or_na>__seed-<n>__date-YYYYMMDD"
+arm: "baseline|paper1_isolation|paper2_isolation|combination"
+
+paper_refs:
+  paper1: "2602.11374"
+  paper2: "2512.02556"
+
+mechanisms:
+  paper1_head_selection_enabled: false
+  paper2_token_selection_enabled: false
+
+knobs:
+  k_h: null
+  k_t: null
+  d_state: null
+  L: null
+  context_policy: null
+
+controls:
+  seed: 1
+  data_split_id: "default-v1"
+  tokenizer_version: "<pin-version>"
+  training_steps: null
+  hardware_budget:
+    gpu_type: "<gpu-model>"
+    gpu_count: 1
+    wall_clock_hours_cap: null
+
+metrics:
+  quality:
+    cov: null
+    kv_ret: null
+    swde: null
+    benchmark_slice_score: null
+    context_management_score: null
+    context_management_steps: null
+  cost:
+    memory_mb: null
+    output_tokens: null
+    latency_ms: null
+
+comparability:
+  benchmark_overlap_only: true
+  tuning_budget_matched: true
+  compute_budget_matched: true
+  non_comparable_reason: null
+
+artifacts:
+  notes_path: "docs/notes.md"
+  plan_path: "docs/experiment-plan.md"
+  logs_path: "<path-to-logs>"
+  checkpoint_path: "<path-to-checkpoint>"
+
+notes:
+  - "Record any deviation from fixed controls here."
+  - "If compared against another run, record whether comparison is mechanism-level valid."
