@@ -149,22 +149,41 @@ DSA alignment + RL objective family (compressed):
 \mathcal{J}_{GRPO}(\theta)=\text{clipped policy objective} - \beta\,D_{KL}
 ```
 
-### Implementation sketch
+### RAD-TSH training flow
 
-1. **A:** ablate heads -> rank -> keep top `k_h` -> replace others with SSM heads -> distill.
-2. **B:** index all prior tokens -> pick top `k_t` -> sparse attention -> continue pretraining and RL.
-3. For fair comparison, isolate mechanism effects from training-pipeline effects.
+This is the exact flow for RAD-TSH and where distillation enters:
+
+1. **Start with a pretrained Transformer teacher.**
+2. **Rank attention heads by retrieval importance** using synthetic KV-retrieval ablation, then sort heads by performance drop.
+3. **Build a hybrid student:** keep top `k_h` heads as attention and replace non-retained heads with SSM heads (basis: DISCRETEMAMBA-2 in the paper text).
+4. **Run distillation training:**
+   - Original MOHAWK has 3 stages (matrix orientation -> hidden-state alignment -> weight transfer + KD).
+   - RAD-TSH adaptation skips matrix orientation because critical heads are copied from teacher.
+   - Training proceeds with hidden-state alignment and knowledge distillation.
+5. **Sweep and evaluate** (`k_h`, optional `d_state`) on retrieval/cost metrics under matched controls.
+
+DSA flow is separate: index tokens -> select Top-`k_t` -> sparse attention -> broader pretraining/RL pipeline.
+
+### Evidence from RAD-TSH paper
+
+- **Head ranking (Sec 4.1):** "ablate each attention head ... and measure ... drop ... This provides a sorted list of heads, from most to least critical".
+- **Hybrid construction (Sec 4.2):** "Retained heads ... kept unchanged" and "Replaced heads ... replaced ...".
+- **Feature alignment (Sec 4.2):** "Chunks assigned to retained heads are processed by their original attention operators, while all other chunks are processed by the SSM operators ... producing a single mixing output with the same interface as the teacher."
+- **SSM basis (Sec 3.3):** "DISCRETEMAMBA-2 ... we use it as the basis for our SSM replacements."
+- **MOHAWK stages (Sec 3.3):** "The pipeline optimizes the student parameters ... across three stages" followed by "Matrix Orientation", "Hidden-State Alignment", and "Weight Transfer & Knowledge Distillation".
+- **RAD-TSH adaptation (Sec 5.3):** "Since critical heads are copied from teacher, matrix orientation is skipped; training proceeds via hidden-state alignment and knowledge distillation."
+- **Related-work boundary:** Zamba and Jamba appear in the references list, not as the method backbone declaration.
 
 ### Pseudocode (optional)
 
 ```python
-# A: head selection
+# RAD-TSH: head selection + hybrid build + distill
 scores = ablate_each_head_and_measure_drop(teacher)
 keep_heads = top_k(scores, k_h)
 student_a = build_hybrid(keep_heads=keep_heads)
 distill(student_a, teacher)
 
-# B: token selection
+# DSA: token selection
 for query in sequence:
     idx_scores = indexer(query, history)
     sel = top_k(idx_scores, k_t)
