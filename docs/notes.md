@@ -80,17 +80,17 @@ For a 100K-token reasoning trace, most past tokens are irrelevant at each step. 
 
 ### Experiments in the Papers
 
-| Paper | Experiment | Tasks/Benchmarks | Models/Baselines | Metrics | Key outcome |
+| Method | Experiment | Tasks/Benchmarks | Models/Baselines | Metrics | Key outcome |
 |---|---|---|---|---|---|
-| A | Retained-head sweep (Table 1) | retrieval-heavy + knowledge-focused groups | Hybrid-Llama, Hybrid-Qwen vs teachers | KV-Ret, SWDE, COV | retrieval-heavy COV rises sharply by `k_h=10` |
-| A | Memory analysis (Table 2) | sequence lengths 128/2048/4096 | retrieval-aware vs layer-wise 25/50% | memory (MB) | retrieval-aware shows lowest memory row |
-| A | State-size ablation (Table 4) | retrieval-heavy group with top-20 heads fixed | `d_state` in {64,8,4} | COV | 95.8 -> 90.0 -> 81.0 trend |
-| A | Head localization (Table 6/5.5) | single-head ablation in student | retained attention vs SSM heads | drop sensitivity | retrieval burden concentrated in retained attention heads |
-| B | Main benchmark table (Table 2) | reasoning/coding/agentic suite | source model vs closed/open models | EM/Pass@1/rating/resolved/success | strong broad benchmark profile |
-| B | Efficiency table (Table 3) | reasoning-heavy benchmarks | source model vs Speciale and peers | score + token count | better scores often come with higher token use |
-| B | Competition outcomes (Table 4) | IMO/CMO/IOI/ICPC | Speciale | score + medal | reported gold-level outcomes |
-| B | Synthetic task transfer (Table 5/Fig 5) | synthesized general-agent tasks | source-model experiments + stronger proprietary baselines | Pass@K + transfer behavior | synthetic tasks are hard; RL transfer improvements reported |
-| B | Context management (Sec 4.4/Fig 6) | BrowseComp-style search-agent regime | Summary/Discard-75/Discard-all/parallel baseline | score + steps | 67.6 branch via discard-all strategy |
+| RAD-TSH | Retained-head sweep (Table 1) | retrieval-heavy + knowledge-focused groups | Hybrid-Llama, Hybrid-Qwen vs teachers | KV-Ret, SWDE, COV | retrieval-heavy COV rises sharply by `k_h=10` |
+| RAD-TSH | Memory analysis (Table 2) | sequence lengths 128/2048/4096 | retrieval-aware vs layer-wise 25/50% | memory (MB) | retrieval-aware shows lowest memory row |
+| RAD-TSH | State-size ablation (Table 4) | retrieval-heavy group with top-20 heads fixed | `d_state` in {64,8,4} | COV | 95.8 -> 90.0 -> 81.0 trend |
+| RAD-TSH | Head localization (Table 6/5.5) | single-head ablation in student | retained attention vs SSM heads | drop sensitivity | retrieval burden concentrated in retained attention heads |
+| DSA | Main benchmark table (Table 2) | reasoning/coding/agentic suite | source model vs closed/open models | EM/Pass@1/rating/resolved/success | strong broad benchmark profile |
+| DSA | Efficiency table (Table 3) | reasoning-heavy benchmarks | source model vs Speciale and peers | score + token count | better scores often come with higher token use |
+| DSA | Competition outcomes (Table 4) | IMO/CMO/IOI/ICPC | Speciale | score + medal | reported gold-level outcomes |
+| DSA | Synthetic task transfer (Table 5/Fig 5) | synthesized general-agent tasks | source-model experiments + stronger proprietary baselines | Pass@K + transfer behavior | synthetic tasks are hard; RL transfer improvements reported |
+| DSA | Context management (Sec 4.4/Fig 6) | BrowseComp-style search-agent regime | Summary/Discard-75/Discard-all/parallel baseline | score + steps | 67.6 branch via discard-all strategy |
 
 ### Side-by-Side Canonical Comparison
 
@@ -191,6 +191,81 @@ for query in sequence:
 train_with_pretraining_and_grpo(student_b)
 ```
 
+## Zero-Ambiguity Execution Contract
+
+### Scope
+
+- This repo compares **mechanisms**, not full training pipelines.
+- Methods in scope: `RAD-TSH` (head retention + SSM replacement) and `DSA` (token top-`k_t` routing).
+- Source of truth for method/evidence: this file and `docs/experiment-plan.md`.
+
+### Required Experiment Arms
+
+| Arm | `rad_mode` | DSA path | Purpose |
+|---|---|---|---|
+| `baseline` | `off` | `off` | shared control |
+| `rad_tsh_isolation` | `selection_only` or `full_ssm` | `off` | isolate head/SSM effects |
+| `dsa_isolation` | `off` | `on` | isolate token-routing effects |
+| `combination` | `full_ssm` (or tested RAD mode) | `on` | test complementarity |
+
+### Required Knobs and Meanings
+
+- `k_h`: retained attention head count for RAD-TSH.
+- `d_state`: SSM state size for RAD-TSH replaced heads.
+- `k_t`: selected token count per query for DSA.
+- `L`: evaluated sequence length setting.
+- `context_policy`: explicit label for context-management policy in DSA-related runs.
+
+### RAD-TSH Distillation Flow (non-negotiable)
+
+1. Rank heads by synthetic KV-retrieval ablation (Sec 4.1).
+2. Keep top `k_h` attention heads and replace non-retained heads with SSM heads (Sec 4.2).
+3. Use DiscreteMamba-2 basis for SSM replacements (Sec 3.3).
+4. Train with MOHAWK adaptation: matrix orientation skipped; hidden-state alignment + knowledge distillation are used (Sec 5.3).
+
+### Comparison Validity Rules
+
+- Do not claim raw leaderboard superiority across methods without harmonized budgets and benchmark overlap.
+- Pair every quality metric claim with cost metrics (memory/tokens/compute).
+- Mark non-comparable results explicitly.
+
+### Definition of Done for First Pilot
+
+- Run at least one successful seed for each arm.
+- Include `k_h=0` and one retrieval-preserving `k_h` setting in RAD-TSH runs.
+- Include low/medium/high `k_t` in DSA runs.
+- Log all runs in `experiments/run-manifest.template.yaml` fields.
+
+### Code-Level Mapping (what must be implemented where)
+
+- `baselines/nanogpt/model.py`
+  - add `rad_mode` switch and routing logic for retained heads vs replaced heads.
+  - `selection_only`: non-retained head slots are no-op/zeroed.
+  - `full_ssm`: non-retained head slots use SSM heads with `d_state`.
+  - output tensor shape and residual interface must remain identical to baseline.
+- `baselines/nanogpt/train.py`
+  - expose and log run knobs: `rad_mode`, `k_h`, `d_state`, `k_t`, `L`, `context_policy`.
+  - keep optimizer/scheduler/eval protocol matched across arms.
+- `baselines/nanogpt/config/*.py`
+  - define arm-specific configs only through documented knobs.
+  - avoid hidden architecture/training changes across arms.
+- `experiments/run-manifest.template.yaml`
+  - each run must record arm, mechanism toggles, knobs, controls, and quality+cost metrics.
+
+### Hard Invariants (must stay true)
+
+1. `baseline` must be behavior-identical to pure baseline path (`rad_mode=off`, DSA off).
+2. `rad_tsh_isolation` must not enable DSA.
+3. `dsa_isolation` must not enable RAD head/SSM routing.
+4. `combination` is the only arm allowed to enable both RAD-TSH and DSA.
+5. Any result without matched controls is marked non-comparable.
+
+### Explicitly Out of Scope (to prevent drift)
+
+- Reproducing full source-paper RL/post-training pipelines for DSA.
+- Cross-paper leaderboard claims without harmonized benchmarks and budgets.
+- Untracked architectural edits not captured in run manifest knobs/notes.
+
 ---
 
 ## Critical Analysis
@@ -243,24 +318,24 @@ Both papers are primarily **selection** mechanisms. Weighting/regularization ter
   2. MLA/MQA implementation mechanics for DSA.
   3. Cost-aware test-time compute scaling and context-management policy design.
 - **Diagnostics:**
-  1. Track retrieval-heavy COV vs `k_h` and `d_state` in A.
-  2. Track benchmark score vs token output and context policy in B.
+  1. Track retrieval-heavy COV vs `k_h` and `d_state` in RAD-TSH.
+  2. Track benchmark score vs token output and context policy in DSA.
   3. Keep direct-comparison claims restricted to harmonized settings.
 
 ---
 
 ## Key Equations Summary
 
-| Paper | Equation | Meaning |
+| Method | Equation | Meaning |
 |---|---|---|
-| A | `Attn(X)=softmax(QK^T/sqrt(d_k))V` | global token mixing via attention |
-| A | `h_t=A_t h_{t-1}+B_t x_t`, `y_t=C_t h_t + D_t x_t` | recurrent state update/output |
-| A | `min ||M_T^{(l)}-M_S^{(l)}||_F` | mixer alignment objective |
-| A | `min L_CE(teacher, student)` | final distillation objective |
-| B | `I_{t,s}=sum_j w^I_{t,j}ReLU((q^I_{t,j})^T k^I_s)` | indexer score per query-token pair |
-| B | `u_t=Attn(h_t,{c_s | I_{t,s} in Top-k_t(I_{t,:})})` | sparse attention over selected tokens |
-| B | `L_I=sum_t D_KL(p_{t,:} || Softmax(I_{t,:}))` | indexer alignment loss |
-| B | `J_GRPO = clipped objective - beta*KL` | RL post-training control objective |
+| RAD-TSH | `Attn(X)=softmax(QK^T/sqrt(d_k))V` | global token mixing via attention |
+| RAD-TSH | `h_t=A_t h_{t-1}+B_t x_t`, `y_t=C_t h_t + D_t x_t` | recurrent state update/output |
+| RAD-TSH | `min ||M_T^{(l)}-M_S^{(l)}||_F` | mixer alignment objective |
+| RAD-TSH | `min L_CE(teacher, student)` | final distillation objective |
+| DSA | `I_{t,s}=sum_j w^I_{t,j}ReLU((q^I_{t,j})^T k^I_s)` | indexer score per query-token pair |
+| DSA | `u_t=Attn(h_t,{c_s | I_{t,s} in Top-k_t(I_{t,:})})` | sparse attention over selected tokens |
+| DSA | `L_I=sum_t D_KL(p_{t,:} || Softmax(I_{t,:}))` | indexer alignment loss |
+| DSA | `J_GRPO = clipped objective - beta*KL` | RL post-training control objective |
 
 ---
 

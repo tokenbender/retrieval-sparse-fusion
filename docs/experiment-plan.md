@@ -93,3 +93,11 @@ Implementation note:
 
 - `baselines/nanogpt/` is baseline-only and has no SSM recurrence path.
 - RAD-TSH `full_ssm` runs require adding a Transformer-SSM hybrid implementation track.
+
+## Immediate Next Steps
+
+1. Implement `rad_mode` in `baselines/nanogpt/model.py` with `baseline`, `selection_only`, and `full_ssm`.
+2. Add a reproducible head-ranking probe and persist ranked heads for run reuse.
+3. Add DSA token routing (`k_t`) as a separate switchable path.
+4. Add config files for the four experiment arms and wire knobs (`k_h`, `k_t`, `d_state`, `rad_mode`).
+5. Run a pilot matrix and record all runs in `experiments/run-manifest.template.yaml` with quality + cost metrics.
