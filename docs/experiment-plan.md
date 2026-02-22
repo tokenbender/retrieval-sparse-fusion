@@ -6,29 +6,32 @@ Implementation baseline code path: `baselines/nanogpt/`.
 
 ## Objective
 
-Measure whether Paper 1 and Paper 2 mechanisms are complementary under matched controls:
+Measure whether RAD-TSH and DSA are complementary under matched controls:
 
-- **Paper 1 (`2602.11374`)**: retrieval-aware head selection in hybrid Transformer-SSM (`k_h`) with optional state-size sensitivity (`d_state`).
-- **Paper 2 (`2512.02556`)**: DeepSeek Sparse Attention token selection (`k_t`) with context-management policy effects that must be tracked separately.
+- **RAD-TSH (`2602.11374`)**: retrieval-aware head selection in hybrid Transformer-SSM (`k_h`) where non-retained heads are replaced by SSM recurrence; include optional state-size sensitivity (`d_state`).
+- **DSA (`2512.02556`)**: token-level sparse attention (`k_t`) with context-management policy effects that must be tracked separately.
+
+Scope note: we include the DSA mechanism from `2512.02556`, not to claim full-system parity against the entire source-paper training pipeline.
 
 This plan focuses on mechanism-level effects, not full-pipeline leaderboard comparison.
 
 ## Arms
 
 1. **Baseline**
-   - No Paper 1 or Paper 2 mechanism.
+   - No RAD-TSH or DSA mechanism.
    - Use shared control path and fixed evaluation protocol.
 
-2. **Paper 1 Isolation**
-   - Enable head selection only (`k_h` sweep).
+2. **RAD-TSH Isolation**
+   - Enable RAD-TSH head-selection path (`k_h` sweep).
+   - Split runs into `rad_mode=selection_only` vs `rad_mode=full_ssm` to isolate SSM-replacement effect.
    - Keep token selection disabled.
 
-3. **Paper 2 Isolation**
+3. **DSA Isolation**
    - Enable token selection only (`k_t` sweep).
    - Keep head-selection mechanism disabled.
    - Report context-policy variant per run (for example, summary/discard variants if applicable).
 
-4. **Combination (Paper 1 + Paper 2)**
+4. **Combination (RAD-TSH + DSA)**
    - Enable both `k_h` and `k_t`.
    - Test complementarity and tradeoffs.
 
@@ -43,9 +46,10 @@ This plan focuses on mechanism-level effects, not full-pipeline leaderboard comp
 
 ## Tunable Variables
 
-- **Paper 1 knob**: `k_h`
-- **Paper 2 knob**: `k_t`
-- Optional Paper 1 sensitivity knob: `d_state`
+- **RAD-TSH knob**: `k_h`
+- **DSA knob**: `k_t`
+- Optional RAD-TSH sensitivity knob: `d_state`
+- RAD-TSH mode label: `rad_mode` in `{selection_only, full_ssm}`
 - Sequence length setting(s): `L`
 - Context-management policy label (reported, not hidden)
 
@@ -69,18 +73,23 @@ Always pair quality metrics with cost metrics.
 ## Minimal Run Matrix
 
 - Baseline: 1-2 seed runs
-- Paper 1 only: `k_h` sweep x seeds
-- Paper 2 only: `k_t` sweep x seeds
+- RAD-TSH only: `k_h` sweep x `rad_mode` x seeds
+- DSA only: `k_t` sweep x seeds
 - Combined: `(k_h, k_t)` grid x seeds
 
 Suggested first pass (grounded to `docs/notes.md` variables):
 
-- Paper 1 sweeps: include `k_h=0` control and at least one retrieval-preserving `k_h` setting.
-- Paper 2 sweeps: include low/medium/high `k_t` settings with the same evaluation protocol.
-- Combined sweeps: reuse the Paper 1/Paper 2 candidate settings before widening the grid.
+- RAD-TSH sweeps: include `k_h=0` control and at least one retrieval-preserving `k_h` setting for both `selection_only` and `full_ssm`.
+- DSA sweeps: include low/medium/high `k_t` settings with the same evaluation protocol.
+- Combined sweeps: reuse the RAD-TSH/DSA candidate settings before widening the grid.
 
 Use `experiments/run-manifest.template.yaml` to register every run.
 
 Baseline entry command:
 
 `python baselines/nanogpt/train.py baselines/nanogpt/config/train_fineweb10B.py`
+
+Implementation note:
+
+- `baselines/nanogpt/` is baseline-only and has no SSM recurrence path.
+- RAD-TSH `full_ssm` runs require adding a Transformer-SSM hybrid implementation track.

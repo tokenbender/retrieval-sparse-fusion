@@ -1,15 +1,17 @@
-run_id: "<arm>__kh-<value_or_na>__kt-<value_or_na>__ds-<value_or_na>__cp-<policy_or_na>__seed-<n>__date-YYYYMMDD"
-arm: "baseline|paper1_isolation|paper2_isolation|combination"
+run_id: "<arm>__radm-<mode_or_na>__kh-<value_or_na>__kt-<value_or_na>__ds-<value_or_na>__cp-<policy_or_na>__seed-<n>__date-YYYYMMDD"
+arm: "baseline|rad_tsh_isolation|dsa_isolation|combination"
 
-paper_refs:
-  paper1: "2602.11374"
-  paper2: "2512.02556"
+method_refs:
+  rad_tsh: "2602.11374"
+  dsa: "2512.02556"
 
 mechanisms:
-  paper1_head_selection_enabled: false
-  paper2_token_selection_enabled: false
+  rad_head_selection_enabled: false
+  rad_ssm_replacement_enabled: false
+  dsa_token_selection_enabled: false
 
 knobs:
+  rad_mode: "na|selection_only|full_ssm"
   k_h: null
   k_t: null
   d_state: null
